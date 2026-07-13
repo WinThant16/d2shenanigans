@@ -1,8 +1,11 @@
 import requests
+import pandas as pd
+import time
+import os
 
 url = "https://api.opendota.com/api/publicMatches"
 
-payload = {'less_than_match_id':'8892169836', 'min_rank':70, 'max_rank':80}
+payload = {'less_than_match_id':'8891729002', 'min_rank':70, 'max_rank':80}
 
 def is_this_match_valid(match):
 	# check valid game duration
@@ -24,26 +27,56 @@ def is_this_match_valid(match):
 	
 	return False
 
-# poison = {'match_id': 8892169771, 'duration': 0, 'lobby_type': 4, 'game_mode': 1,
-#           'radiant_team': [0,0,0,0,0], 'dire_team': [0,0,0,0,0]}
-# print(is_this_match_valid(poison))   # expect False
 
-# good = {'match_id': 8892169790, 'duration': 2454, 'lobby_type': 7, 'game_mode': 22,
-#         'radiant_team': [63,98,111,106,74], 'dire_team': [35,5,25,39,128]}
-# print(is_this_match_valid(good))     # expect True
+file_path = "data/raw/valid-matches.parquet"
 
+if os.path.exists(file_path):
+	df = pd.read_parquet(file_path)
+	all_matches = df.to_dict('records')
+	starting_cursor = df['match_id'].min()
+else:
+	all_matches = []
+	starting_cursor = 8891729002
 
-try: 
-	# get request to fetch data
-	response = requests.get(url, timeout=30, params=payload)
-	# error if http request failed (404/500)
-	response.raise_for_status()
-	# extract and use response data
-	data = response.json()
+payload['less_than_match_id'] = starting_cursor
+retry_counter = 0
+while(len(all_matches) < 50000):
+	try:
+		# get request to fetch data
+		response = requests.get(url, timeout=30, params=payload)
+		# error if http request failed (404/500)
+		response.raise_for_status()
+		# extract and use response data
+		data = response.json()
+
+	except requests.exceptions.RequestException as error:
+		print(f"Error retrieving data {error}")
+		if (retry_counter >= 5):
+			break
+		print("Waiting 5 seconds before moving to the next step...")
+		time.sleep(5) 
+		retry_counter +=1
+		print("Resuming script execution...")
+		continue
+				
+	# validate matches as ranked
+	retry_counter = 0
+
 	valid_matches = [match for match in data if is_this_match_valid(match)]
+		
+	all_matches.extend(valid_matches)
+
+	# update last match id to recurse
+	cursor = min(match['match_id'] for match in data)
+	payload['less_than_match_id'] = cursor
+
+	df = pd.DataFrame(all_matches).drop_duplicates(subset="match_id")
+	all_matches = df.to_dict('records')
+	df.to_parquet(file_path)
+	time.sleep(1.1)
+	print(f"{len(all_matches)} collected so far.")
+
+if (retry_counter >= 5):
+	print("Encountered error while retrieving.")
+else:
 	print("Data successfully retrieved.")
-	print(f"Retrieved {len(data)} matches, {len(valid_matches)} valid after filtering.")
-
-
-except requests.exceptions.RequestException as error:
-	print(f"Error retrieving data {error}")
