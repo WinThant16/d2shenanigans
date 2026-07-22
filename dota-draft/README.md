@@ -20,6 +20,13 @@ The goal is to predict the outcomes of games based on heroes on either Dire or R
 - Split: temporal (train on older match IDs, test on newer) to avoid leakage from meta shifts
 - Model: logistic regression baseline
 
+## Status
+- [x] Data pipeline (OpenDota fetch + validation)
+- [x] Baseline model (logistic regression, 56.2%)
+- [ ] Improved model (gradient boosting, synergy features)
+- [ ] Draft recommender
+- [ ] Interactive demo
+
 ## How to run
 - Firstly after cloning the repo, make sure you are in the dota-draft directory.
 - Create and activate a virtual environment.
