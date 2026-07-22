@@ -40,7 +40,7 @@ else:
 
 payload['less_than_match_id'] = starting_cursor
 retry_counter = 0
-while(len(all_matches) < 50000):
+while(len(all_matches) < 150000):
 	try:
 		# get request to fetch data
 		response = requests.get(url, timeout=30, params=payload)
