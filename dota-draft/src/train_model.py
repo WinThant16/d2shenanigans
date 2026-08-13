@@ -88,3 +88,47 @@ print(f"Best iteration: {xgb_model.best_iteration}")
 # CONSTRUCTOR, not fit():
 #   xgb.XGBClassifier(..., early_stopping_rounds=20)
 #   .fit(X_train, y_train, eval_set=[(X_val, y_val)])
+
+
+# plots
+import matplotlib.pyplot as plt
+
+# probs_logreg and probs_xgb
+lr_true, lr_pred = calibration_curve(y_test, probs_logreg, n_bins=10, strategy="quantile")
+xgb_true, xgb_pred = calibration_curve(y_test, probs_xgb, n_bins=10, strategy="quantile")
+
+plt.figure(figsize=(6, 6))
+plt.plot([0, 1], [0, 1], "--", color="gray", label="Perfect calibration")
+plt.plot(lr_pred, lr_true, marker="o", label="Logistic Regression")
+plt.plot(xgb_pred, xgb_true, marker="s", label="XGBoost")
+plt.xlabel("Predicted win probability")
+plt.ylabel("Actual win rate")
+plt.title("Calibration: predicted vs actual")
+plt.legend()
+plt.savefig("reports/calibration.png", dpi=120, bbox_inches="tight")
+plt.close()
+
+
+# heroes plots
+import json
+with open("constants/heroes.json") as f:
+    hero_data = json.load(f)
+id_to_name = {int(k): v["localized_name"] for k, v in hero_data.items()}
+
+coefs = logreg.coef_[0]                      # one weight per hero slot
+order = np.argsort(coefs)                     # indices sorted low -> high
+top = order[-10:][::-1]                        # 10 highest (strongest)
+bottom = order[:10]                            # 10 lowest (weakest)
+
+print("Strongest heroes (by coefficient):", top.tolist())
+print("Weakest heroes:", bottom.tolist())
+
+idx = np.concatenate([bottom, top[::-1]])
+plt.figure(figsize=(8, 6))
+plt.barh(range(len(idx)), coefs[idx])
+plt.yticks(range(len(idx)), [id_to_name.get(i, f"hero {i}") for i in idx])
+plt.xlabel("Contribution to team's win probability.")
+plt.title("Most impactful heroes")
+plt.axvline(0, color="gray", linewidth=0.8)
+plt.savefig("reports/hero_coefficients.png", dpi=120, bbox_inches="tight")
+plt.close()

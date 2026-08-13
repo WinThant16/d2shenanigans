@@ -4,7 +4,7 @@ Hello, this is a Dota 2 draft win-probability model, predicting match outcome pu
 
 ## Overview
 
-The goal is to predict the outcomes of games based on heroes on either Dire or Radiant. This model was created with the goal to suggest what heroes would be great against certain matchups. It is trained on ~150k Divine-ranked All Pick matches using data from OpenDota API.
+The goal is to predict the outcomes of games based on heroes on either Dire or Radiant. This model was created with the goal to suggest what heroes would be great against certain matchups. It is trained on ~150k Divine 1 and above Ranked All Pick matches using data from OpenDota API.
 
 ## Results
 
@@ -25,7 +25,10 @@ matches, test on newer) to avoid meta-shift leakage.
 - Draft contributes ~2.6 points of predictive lift over the side-advantage baseline.
 - Model is well-calibrated in the 0.4-0.7 probability range (where ~ 95% of predictions fall)
 - This is a draft-only prediction, and it is inherently capped in the mid-50s because skill and in-game execution are not captured.
-- ![calibration](data/calibration.png)
+![calibration](reports/calibration.png)
+*Calibration: when the model predicts X% win, radiant wins ~X% of the time.*
+- Heroes most associated with winning (top) and losing (bottom) in the dataset. Coefficients reflect win association at Divine rank on the current patch, not absolute hero strength.
+![heroes](reports/hero_coefficients.png)
 
 ## Approach
 - Data: OpenDota `/publicMatches`, cursor-based pagination, filtered to ranked all-pick (lobby 7, game mode 22), validated for complete drafts
