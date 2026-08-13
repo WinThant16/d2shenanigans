@@ -1,18 +1,31 @@
 # Dota 2 Hero Pick Helper
 
-Hello, this is a project I've been working on in my own free time. It is a Dota 2 draft win-probability model, predicting match outcome purely from hero drafts alone.
+Hello, this is a Dota 2 draft win-probability model, predicting match outcome purely from hero drafts alone.
 
 ## Overview
 
 The goal is to predict the outcomes of games based on heroes on either Dire or Radiant. This model was created with the goal to suggest what heroes would be great against certain matchups. It is trained on ~150k Divine-ranked All Pick matches using data from OpenDota API.
 
 ## Results
-- Test Accuracy: 56.2% on a temporal holdout
-- Baseline (always predict Radiant): 53.7%
+
+Draft-only prediction, evaluated on a temporal holdout (train on older
+matches, test on newer) to avoid meta-shift leakage.
+
+| Model | Test Accuracy |
+|-------|--------------|
+| Always predict Radiant (baseline) | 53.7% |
+| Logistic Regression | 55.7% |
+| XGBoost (tuned) | 56.0% |
+
+
+- Logistic and tuned XGBoost are statistically tied. On raw hero features
+  the ceiling is ~56%, and a more complex model does not beat a linear one.
+- This points to the *feature representation* as the bottleneck, not the
+  model. Adding interaction features (synergy / counter) is the next step.
 - Draft contributes ~2.6 points of predictive lift over the side-advantage baseline.
-- ![calibration](data/calibration.png)
 - Model is well-calibrated in the 0.4-0.7 probability range (where ~ 95% of predictions fall)
 - This is a draft-only prediction, and it is inherently capped in the mid-50s because skill and in-game execution are not captured.
+- ![calibration](data/calibration.png)
 
 ## Approach
 - Data: OpenDota `/publicMatches`, cursor-based pagination, filtered to ranked all-pick (lobby 7, game mode 22), validated for complete drafts
@@ -22,8 +35,9 @@ The goal is to predict the outcomes of games based on heroes on either Dire or R
 
 ## Status
 - [x] Data pipeline (OpenDota fetch + validation)
-- [x] Baseline model (logistic regression, 56.2%)
-- [ ] Improved model (gradient boosting, synergy features)
+- [x] Baseline model (logistic regression, 55.7%)
+- [x] Model comparison (XGBoost, tied at ~56%)
+- [ ] Interaction features (synergy / counter)
 - [ ] Draft recommender
 - [ ] Interactive demo
 
