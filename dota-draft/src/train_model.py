@@ -124,11 +124,14 @@ print("Strongest heroes (by coefficient):", top.tolist())
 print("Weakest heroes:", bottom.tolist())
 
 idx = np.concatenate([bottom, top[::-1]])
+plt.style.use("dark_background")
 plt.figure(figsize=(8, 6))
 plt.barh(range(len(idx)), coefs[idx])
 plt.yticks(range(len(idx)), [id_to_name.get(i, f"hero {i}") for i in idx])
 plt.xlabel("Contribution to team's win probability.")
 plt.title("Most impactful heroes")
 plt.axvline(0, color="gray", linewidth=0.8)
+
 plt.savefig("reports/hero_coefficients.png", dpi=120, bbox_inches="tight")
+
 plt.close()
