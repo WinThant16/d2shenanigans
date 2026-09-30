@@ -5,7 +5,7 @@ import os
 
 url = "https://api.opendota.com/api/publicMatches"
 
-payload = {'less_than_match_id':'8891729002', 'min_rank':70, 'max_rank':80}
+payload = {'min_rank':70, 'max_rank':80}
 
 def is_this_match_valid(match):
 	# check valid game duration
@@ -31,16 +31,18 @@ def is_this_match_valid(match):
 file_path = "data/raw/valid-matches.parquet"
 
 if os.path.exists(file_path):
-	df = pd.read_parquet(file_path)
-	all_matches = df.to_dict('records')
-	starting_cursor = df['match_id'].min()
-else:
-	all_matches = []
-	starting_cursor = 8891729002
+    df = pd.read_parquet(file_path)
+    all_matches = df.to_dict('records')
 
-payload['less_than_match_id'] = starting_cursor
+    # Resume by continuing backward from the oldest match we already have
+    payload['less_than_match_id'] = int(df['match_id'].min())
+else:
+    # Fresh run: don't set less_than_match_id.
+    # Let OpenDota return the newest available matches first.
+    all_matches = []
+
 retry_counter = 0
-while(len(all_matches) < 150000):
+while(len(all_matches) < 300000):
 	try:
 		# get request to fetch data
 		response = requests.get(url, timeout=30, params=payload)
@@ -48,6 +50,9 @@ while(len(all_matches) < 150000):
 		response.raise_for_status()
 		# extract and use response data
 		data = response.json()
+		if not data:
+			print("OpenDota returned no matches. Stopping.")
+			break
 
 	except requests.exceptions.RequestException as error:
 		print(f"Error retrieving data {error}")
