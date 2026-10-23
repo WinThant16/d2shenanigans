@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from scipy.sparse import load_npz
 import json
+from analyze_matchups import rank_matchups, build_pair_stats
 
 # ---- Step 1: Load interaction features + labels ----
 X = load_npz(

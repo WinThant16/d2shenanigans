@@ -174,57 +174,7 @@ def encode_interaction_match(
     return cols, values
 
 
-# ---- Step 6: Sanity check ONE match first ----
-test_cols, test_values = encode_interaction_match(
-    all_matches[0],
-    pair_to_idx,
-    synergy_offset,
-    matchup_offset,
-)
-
-print("Total nonzero features:", len(test_values))
-
-hero_count = sum(
-    col < synergy_offset
-    for col in test_cols
-)
-
-synergy_count = sum(
-    synergy_offset <= col < matchup_offset
-    for col in test_cols
-)
-
-matchup_count = sum(
-    col >= matchup_offset
-    for col in test_cols
-)
-
-print("Hero features:", hero_count)
-print("Synergy features:", synergy_count)
-print("Matchup features:", matchup_count)
-
-
-# Make sure the Radiant/Dire signs are also behaving correctly.
-hero_values = [
-    value
-    for col, value in zip(test_cols, test_values)
-    if col < synergy_offset
-]
-
-synergy_values = [
-    value
-    for col, value in zip(test_cols, test_values)
-    if synergy_offset <= col < matchup_offset
-]
-
-print("Hero +1:", hero_values.count(1))
-print("Hero -1:", hero_values.count(-1))
-
-print("Synergy +1:", synergy_values.count(1))
-print("Synergy -1:", synergy_values.count(-1))
-
-
-# ---- Step 7: Preallocate the full sparse matrix data ----
+# ---- Step 6: Preallocate the full sparse matrix data ----
 num_matches = len(all_matches)
 
 # Every valid match has:
@@ -249,7 +199,7 @@ cols = np.empty(num_nonzero, dtype=np.int32)
 values = np.empty(num_nonzero, dtype=np.int8)
 
 
-# ---- Step 8: Encode every match ----
+# ---- Step 7: Encode every match ----
 for i, match in enumerate(all_matches):
     cols_i, values_i = encode_interaction_match(
         match,
@@ -271,7 +221,7 @@ for i, match in enumerate(all_matches):
     values[start:end] = values_i
 
 
-# ---- Step 9: Build the sparse feature matrix ----
+# ---- Step 8: Build the sparse feature matrix ----
 # COO lets us build a matrix directly from:
 # (value, row, column)
 #
@@ -283,7 +233,7 @@ X = coo_matrix(
 ).tocsr()
 
 
-# ---- Step 10: Build the labels ----
+# ---- Step 9: Build the labels ----
 # 1 = Radiant won
 # 0 = Dire won
 #

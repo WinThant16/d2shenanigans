@@ -70,29 +70,5 @@ y = df['radiant_win'].astype(int).values
 print("X.shape: ", X.shape)
 print("y.shape: ", y.shape)
 
-
-# # ---- Step 7: split x and y
-# # rebuild all matches, X, y from this
-# # split (first 80% (older) = train), (last 20% (newer) = test) 
-# split_idx = int(len(df) * 0.8)
-# X_train, X_test = X[:split_idx], X[split_idx:]
-# y_train, y_test = y[:split_idx], y[split_idx:]
-
-# # ---- Step 8: Model
-# model = LogisticRegression(max_iter=1000)
-# model.fit(X_train, y_train)
-
-# accuracy = model.score(X_test, y_test)
-# print(f"Test accuracy: {accuracy:.3f}")
-
-# print(f"Radiant win rate (train): {y_train.mean():.3f}")
-# print(f"Always-guess-radiant accuracy on test: {y_test.mean():.3f}")
-
-# # ---- Step 9: predict freq
-# probs = model.predict_proba(X_test)[:, 1]   # P(radiant win) for each test match
-# true_freq, pred_freq = calibration_curve(y_test, probs, n_bins=10)
-
-# plt.plot(pred_freq, true_freq)
-
 np.savez_compressed("data/processed/features.npz", X=X, y=y)
 print("Saved features to data/processed/features.npz")

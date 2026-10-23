@@ -132,3 +132,7 @@ for matchup in reversed(axe_matchups[-5:]):
         matchup["games"],
         f"{matchup['win_rate']:.2%}"
     )
+
+
+if __name__ == "__main__":
+    df = pd.read_parquet("data/raw/valid-matches.parquet")
