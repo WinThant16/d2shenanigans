@@ -10,7 +10,7 @@ from sklearn.linear_model import LogisticRegression
 # SETTINGS
 # ============================================================
 
-# We already selected this using the validation set.
+# Best regularization value selected earlier using validation data.
 BEST_C = 0.01
 
 
@@ -18,14 +18,15 @@ BEST_C = 0.01
 # STEP 1: Load interaction features + labels
 # ============================================================
 #
-# For this recommender prototype, we'll fit the deployment model
-# using all available matches.
+# X contains:
 #
-# We already evaluated C=0.01 using the earlier temporal
-# train / validation / test experiment.
+# individual hero features
+# + teammate synergy features
+# + opponent matchup features
 #
-# This model is NOT being used to report another test accuracy.
-# It is the model we want to use for recommendations.
+# y:
+#   1 = Radiant win
+#   0 = Dire win
 
 X = load_npz(
     "data/processed/interaction_features.npz"
@@ -38,6 +39,34 @@ y = np.load(
 print("X.shape:", X.shape)
 print("y.shape:", y.shape)
 
+
+# ============================================================
+# STEP 1b: Count how many matches support each feature
+# ============================================================
+#
+# X is sparse.
+#
+# A nonzero entry means that feature was active in that match.
+#
+# Examples:
+#
+# individual hero column:
+#     number of matches where that hero was picked
+#
+# synergy pair column:
+#     number of matches where those heroes were teammates
+#
+# matchup pair column:
+#     number of matches where those heroes were opponents
+#
+# This lets us show how much historical support is behind
+# each coefficient used by the recommender.
+
+feature_support = np.asarray(
+    X.getnnz(axis=0)
+).ravel()
+
+assert len(feature_support) == X.shape[1]
 
 # ============================================================
 # STEP 2: Load feature metadata
@@ -54,6 +83,10 @@ with open(
     "data/processed/interaction_metadata.json"
 ) as f:
     metadata = json.load(f)
+
+
+# Make sure our feature matrix matches the metadata.
+assert X.shape[1] == metadata["total_features"]
 
 
 hero_ids = [
@@ -79,9 +112,6 @@ synergy_offset = metadata["synergy_offset"]
 matchup_offset = metadata["matchup_offset"]
 
 
-assert X.shape[1] == metadata["total_features"]
-
-
 # ============================================================
 # STEP 3: Load hero names
 # ============================================================
@@ -100,14 +130,86 @@ id_to_name = {
 #
 # "Axe"
 #
-# instead of remembering:
-#
-# 2
+# instead of remembering hero ID 2.
 
 name_to_id = {
     info["localized_name"].lower(): int(hero_id)
     for hero_id, info in hero_data.items()
 }
+
+
+# ============================================================
+# ROLE HELPERS
+# ============================================================
+#
+# heroes.json contains broad Valve-style roles such as:
+#
+# Carry
+# Support
+# Initiator
+# Disabler
+# Durable
+# Nuker
+# Escape
+# Pusher
+#
+# These are NOT exact Dota positions 1-5.
+
+available_roles = sorted({
+    role
+    for info in hero_data.values()
+    for role in info.get("roles", [])
+})
+
+
+def normalize_role(role):
+    """
+    Convert something like 'carry' or 'CARRY'
+    into the canonical role name 'Carry'.
+
+    None means no role filtering.
+    """
+
+    if role is None:
+        return None
+
+    role_lookup = {
+        available_role.lower(): available_role
+        for available_role in available_roles
+    }
+
+    key = role.strip().lower()
+
+    if key not in role_lookup:
+        raise ValueError(
+            f"Unknown role: {role}\n"
+            f"Available roles: {', '.join(available_roles)}"
+        )
+
+    return role_lookup[key]
+
+
+def hero_has_role(
+    hero_id,
+    required_role,
+):
+    """
+    Return True if this hero has the requested role.
+
+    If required_role is None, every hero is eligible.
+    """
+
+    if required_role is None:
+        return True
+
+    roles = hero_data[
+        str(hero_id)
+    ].get(
+        "roles",
+        [],
+    )
+
+    return required_role in roles
 
 
 def get_hero_id(hero_name):
@@ -135,23 +237,20 @@ def get_hero_id(hero_name):
 
 
 # ============================================================
-# STEP 4: Fit the deployment interaction model
+# STEP 4: Train the interaction model used for recommendations
 # ============================================================
 #
-# Earlier we used:
+# Model selection has already been done.
 #
-# 70% train
-# 15% validation
-# 15% test
+# C = 0.01 was selected using the earlier validation experiment.
 #
-# to select C and evaluate the model.
+# For this recommender prototype, fit that model on all
+# available historical matches.
 #
-# That experiment is finished.
-#
-# Now that C=0.01 is fixed, we can train the version used by
-# the recommender on all available historical matches.
+# We are NOT using this training run to report a new accuracy.
+# We are using the learned coefficients to score candidate picks.
 
-print("\nTraining deployment interaction model...")
+print("\nTraining interaction model for recommendations...")
 
 model = LogisticRegression(
     C=BEST_C,
@@ -167,22 +266,8 @@ print("Finished training model.")
 
 
 # ============================================================
-# STEP 5: Get one individual hero coefficient
+# STEP 5: Individual hero coefficient + support
 # ============================================================
-#
-# Individual hero features use the hero ID directly as the
-# feature column:
-#
-# hero ID 2  -> column 2
-# hero ID 11 -> column 11
-#
-# Because the original feature representation was:
-#
-# Radiant hero = +1
-# Dire hero    = -1
-#
-# a positive coefficient represents a favorable association
-# for whichever team the hero is playing on.
 
 def get_hero_coef(hero_id):
     return float(
@@ -190,23 +275,19 @@ def get_hero_coef(hero_id):
     )
 
 
+def get_hero_games(hero_id):
+    """
+    Number of training matches where this hero appeared.
+    """
+
+    return int(
+        feature_support[hero_id]
+    )
+
+
 # ============================================================
-# STEP 6: Get a teammate synergy coefficient
+# STEP 6: Teammate synergy coefficient + support
 # ============================================================
-#
-# Example:
-#
-# Axe + Dazzle
-#
-# Synergy features were encoded:
-#
-# +1 if the pair is together on Radiant
-# -1 if the pair is together on Dire
-#
-# Therefore a positive coefficient means the pair is favorable
-# for the team they're on.
-#
-# Unlike matchup features, we do NOT need an ID-based sign flip.
 
 def get_synergy_coef(hero_a, hero_b):
     pair = tuple(
@@ -225,17 +306,31 @@ def get_synergy_coef(hero_a, hero_b):
     )
 
 
+def get_synergy_games(hero_a, hero_b):
+    """
+    Number of training matches where these two heroes
+    appeared on the same team.
+    """
+
+    pair = tuple(
+        sorted((hero_a, hero_b))
+    )
+
+    pair_idx = pair_to_idx[pair]
+
+    synergy_col = (
+        synergy_offset
+        + pair_idx
+    )
+
+    return int(
+        feature_support[synergy_col]
+    )
+
+
 # ============================================================
-# STEP 7: Get matchup coefficient from ONE hero's perspective
+# STEP 7: Opponent matchup coefficient + support
 # ============================================================
-#
-# Matchup features use the lower-ID hero as the stored
-# reference direction.
-#
-# After this function:
-#
-# positive -> favorable for hero_id
-# negative -> unfavorable for hero_id
 
 def get_matchup_coef(
     hero_id,
@@ -256,15 +351,42 @@ def get_matchup_coef(
         model.coef_[0][matchup_col]
     )
 
-    # Stored coefficient favors/disfavors the lower-ID hero.
-    #
-    # If our candidate is the higher-ID hero, reverse the
-    # direction so the number is always from the candidate's
+    # Matchup features are stored from the lower-ID hero's
+    # direction. Flip the coefficient when hero_id is the
+    # higher-ID hero so the result is always from hero_id's
     # perspective.
     if hero_id != pair[0]:
         coef = -coef
 
     return coef
+
+
+def get_matchup_games(
+    hero_id,
+    opponent_id,
+):
+    """
+    Number of training matches where these heroes
+    appeared on opposing teams.
+
+    Direction does not matter for the game count:
+    PL vs Axe and Axe vs PL have the same support.
+    """
+
+    pair = tuple(
+        sorted((hero_id, opponent_id))
+    )
+
+    pair_idx = pair_to_idx[pair]
+
+    matchup_col = (
+        matchup_offset
+        + pair_idx
+    )
+
+    return int(
+        feature_support[matchup_col]
+    )
 
 
 # ============================================================
@@ -277,13 +399,10 @@ def get_matchup_coef(
 # + synergy with each known ally
 # + matchup with each known enemy
 #
-# Existing ally-ally, ally-enemy, and enemy-enemy effects
-# don't need to be included here.
+# The score itself does NOT depend on sample counts.
 #
-# Why?
-#
-# They are already part of the draft and do not change when
-# comparing one candidate against another candidate.
+# Game counts are included only so we can inspect how much
+# historical support exists behind each learned coefficient.
 
 def score_candidate(
     candidate_id,
@@ -306,6 +425,10 @@ def score_candidate(
         candidate_id
     )
 
+    individual_games = get_hero_games(
+        candidate_id
+    )
+
 
     # ---- New teammate synergies ----
 
@@ -317,10 +440,16 @@ def score_candidate(
             ally_id,
         )
 
+        games = get_synergy_games(
+            candidate_id,
+            ally_id,
+        )
+
         synergy_details.append({
             "hero_id": ally_id,
             "hero": id_to_name[ally_id],
             "coef": coef,
+            "games": games,
         })
 
 
@@ -334,10 +463,16 @@ def score_candidate(
             enemy_id,
         )
 
+        games = get_matchup_games(
+            candidate_id,
+            enemy_id,
+        )
+
         matchup_details.append({
             "hero_id": enemy_id,
             "hero": id_to_name[enemy_id],
             "coef": coef,
+            "games": games,
         })
 
 
@@ -360,12 +495,17 @@ def score_candidate(
 
 
     return {
-        "candidate_id": candidate_id,
+        "candidate_id":
+            candidate_id,
+
         "candidate":
             id_to_name[candidate_id],
 
         "individual_coef":
             individual,
+
+        "individual_games":
+            individual_games,
 
         "synergy_total":
             synergy_total,
@@ -397,23 +537,114 @@ def score_candidate(
 def signed(value):
     return f"{value:+.4f}"
 
+# ============================================================
+# SANITY CHECK: synergy vs matchup direction
+# ============================================================
+#
+# Before trusting recommendations, verify two things:
+#
+# 1. Synergy is symmetric:
+#
+#       PL + Axe == Axe + PL
+#
+# 2. Matchup direction reverses:
+#
+#       PL vs Axe == -(Axe vs PL)
+#
+# This checks that our coefficient helpers match the way
+# interaction features were encoded during training.
+
+axe_id = get_hero_id("Axe")
+pl_id = get_hero_id("Phantom Lancer")
+
+
+pl_axe_synergy = get_synergy_coef(
+    pl_id,
+    axe_id,
+)
+
+axe_pl_synergy = get_synergy_coef(
+    axe_id,
+    pl_id,
+)
+
+
+pl_vs_axe = get_matchup_coef(
+    pl_id,
+    axe_id,
+)
+
+axe_vs_pl = get_matchup_coef(
+    axe_id,
+    pl_id,
+)
+
+
+print("\n===================================")
+print("PAIR DIRECTION SANITY CHECK")
+print("===================================")
+
+print(
+    "PL + Axe synergy:",
+    signed(pl_axe_synergy),
+)
+
+print(
+    "Axe + PL synergy:",
+    signed(axe_pl_synergy),
+)
+
+print(
+    "PL vs Axe:",
+    signed(pl_vs_axe),
+)
+
+print(
+    "Axe vs PL:",
+    signed(axe_vs_pl),
+)
+
+
+# Synergy pairs should be identical regardless of argument order.
+assert np.isclose(
+    pl_axe_synergy,
+    axe_pl_synergy,
+)
+
+
+# Matchup direction should be exactly opposite.
+assert np.isclose(
+    pl_vs_axe,
+    -axe_vs_pl,
+)
+
+
+print("Sanity checks passed.")
+
 
 # ============================================================
-# STEP 10: Rank all available candidate heroes
+# STEP 10: Rank eligible candidate heroes
 # ============================================================
 #
-# Run score_candidate() for every hero that has not already
-# been picked.
+# Every unpicked hero is normally eligible.
 #
-# Since every candidate is evaluated against the SAME partial
-# draft, the scores are directly comparable.
+# If required_role is supplied, only heroes containing that
+# role in heroes.json are considered.
 #
-# Higher total_score = more favorable according to the model.
+# IMPORTANT:
+# The scoring formula itself does not change.
+#
+# We are only filtering candidates BEFORE scoring them.
 
 def recommend_candidates(
     ally_ids,
     enemy_ids,
+    required_role=None,
 ):
+    required_role = normalize_role(
+        required_role
+    )
+
     picked_ids = set(
         ally_ids + enemy_ids
     )
@@ -422,10 +653,18 @@ def recommend_candidates(
 
     for candidate_id in hero_ids:
 
-        # A hero cannot be recommended if it has already
-        # been picked by either team.
+        # Already picked by either team.
         if candidate_id in picked_ids:
             continue
+
+
+        # Skip heroes that do not satisfy the requested role.
+        if not hero_has_role(
+            candidate_id,
+            required_role,
+        ):
+            continue
+
 
         result = score_candidate(
             candidate_id=candidate_id,
@@ -436,7 +675,7 @@ def recommend_candidates(
         results.append(result)
 
 
-    # Highest candidate contribution first.
+    # Highest incremental model contribution first.
     results.sort(
         key=lambda result:
             result["total_score"],
@@ -461,6 +700,18 @@ ENEMY_NAMES = [
 ]
 
 
+# Change this to:
+#
+# "Carry"
+# "Support"
+# "Initiator"
+# etc.
+#
+# Use None to disable role filtering completely.
+
+REQUIRED_ROLE = "Carry"
+
+
 ally_ids = [
     get_hero_id(name)
     for name in ALLY_NAMES
@@ -475,6 +726,7 @@ enemy_ids = [
 recommendations = recommend_candidates(
     ally_ids=ally_ids,
     enemy_ids=enemy_ids,
+    required_role=REQUIRED_ROLE,
 )
 
 
@@ -494,6 +746,18 @@ print(
 print(
     "Enemies:",
     ", ".join(ENEMY_NAMES),
+)
+
+print(
+    "Required role:",
+    REQUIRED_ROLE
+    if REQUIRED_ROLE is not None
+    else "Any",
+)
+
+print(
+    "Eligible candidates:",
+    len(recommendations),
 )
 
 
@@ -530,9 +794,6 @@ for rank, result in enumerate(
 # ============================================================
 # STEP 13: Detailed breakdown for top 3
 # ============================================================
-#
-# A ranked list is useful, but we also want the recommender
-# to explain WHY each hero scored highly.
 
 print("\n===================================")
 print("TOP 3 BREAKDOWNS")
@@ -549,7 +810,8 @@ for rank, result in enumerate(
 
     print(
         f"  Individual hero effect: "
-        f"{signed(result['individual_coef'])}"
+        f"{signed(result['individual_coef'])} "
+        f"({result['individual_games']:,} games)"
     )
 
 
@@ -558,7 +820,8 @@ for rank, result in enumerate(
     for item in result["synergies"]:
         print(
             f"    with {item['hero']:<20} "
-            f"{signed(item['coef'])}"
+            f"{signed(item['coef']):>8} "
+            f"({item['games']:,} games)"
         )
 
 
@@ -573,7 +836,8 @@ for rank, result in enumerate(
     for item in result["matchups"]:
         print(
             f"    vs {item['hero']:<22} "
-            f"{signed(item['coef'])}"
+            f"{signed(item['coef']):>8} "
+            f"({item['games']:,} games)"
         )
 
 
