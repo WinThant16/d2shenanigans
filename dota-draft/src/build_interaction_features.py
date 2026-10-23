@@ -242,13 +242,13 @@ X = coo_matrix(
 y = df["radiant_win"].astype(np.int8).values
 
 
-# ---- Step 11: Final sanity checks ----
+# ---- Step 10: Final sanity checks ----
 print("X.shape:", X.shape)
 print("X.nnz:", X.nnz)
 print("y.shape:", y.shape)
 
 
-# ---- Step 12: Save the interaction dataset ----
+# ---- Step 11: Save the interaction dataset ----
 save_npz(
     "data/processed/interaction_features.npz",
     X
@@ -260,7 +260,7 @@ np.save(
 )
 
 
-# ---- Step 13: Save feature metadata ----
+# ---- Step 12: Save feature metadata ----
 # We need this later so model coefficients can be translated
 # back into actual hero pairs instead of meaningless column numbers.
 metadata = {

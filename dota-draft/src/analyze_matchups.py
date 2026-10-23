@@ -100,39 +100,51 @@ def rank_matchups(
 
 num_slots = max(id_to_name.keys()) + 1
 
-(
-    matchup_games,
-    matchup_wins,
-    synergy_games,
-    synergy_wins,
-) = build_pair_stats(df, num_slots)
-
-axe_matchups = rank_matchups(
-    hero_id=2,
-    hero_ids=hero_ids,
-    matchup_games=matchup_games,
-    matchup_wins=matchup_wins,
-    min_games=100
-)
-
-print("\nBest Axe matchups:")
-
-for matchup in axe_matchups[:5]:
-    print(
-        id_to_name[matchup["opponent_id"]],
-        matchup["games"],
-        f"{matchup['win_rate']:.2%}"
-    )
-
-print("\nWorst Axe matchups:")
-
-for matchup in reversed(axe_matchups[-5:]):
-    print(
-        id_to_name[matchup["opponent_id"]],
-        matchup["games"],
-        f"{matchup['win_rate']:.2%}"
-    )
-
 
 if __name__ == "__main__":
     df = pd.read_parquet("data/raw/valid-matches.parquet")
+
+    with open("constants/heroes.json") as f:
+        hero_data = json.load(f)
+
+    id_to_name = {
+        int(k): v["localized_name"]
+        for k, v in hero_data.items()
+    }
+
+    hero_ids = list(id_to_name.keys())
+    num_slots = max(hero_ids) + 1
+
+    (
+        matchup_games,
+        matchup_wins,
+        synergy_games,
+        synergy_wins,
+    ) = build_pair_stats(df, num_slots)
+
+    axe_matchups = rank_matchups(
+        hero_id=2,
+        hero_ids=hero_ids,
+        matchup_games=matchup_games,
+        matchup_wins=matchup_wins,
+        min_games=100
+    )
+
+    print("\nBest Axe matchups:")
+
+    for matchup in axe_matchups[:5]:
+        print(
+            id_to_name[matchup["opponent_id"]],
+            matchup["games"],
+            f"{matchup['win_rate']:.2%}"
+        )
+
+    print("\nWorst Axe matchups:")
+
+    for matchup in reversed(axe_matchups[-5:]):
+        print(
+            id_to_name[matchup["opponent_id"]],
+            matchup["games"],
+            f"{matchup['win_rate']:.2%}"
+        )
+

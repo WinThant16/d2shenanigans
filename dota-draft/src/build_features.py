@@ -1,8 +1,5 @@
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn.calibration import calibration_curve
-import matplotlib.pyplot as plt
 
 # ---- Step 1: Load the data ----
 # Read the parquet built in Phase 1 into a DataFrame.

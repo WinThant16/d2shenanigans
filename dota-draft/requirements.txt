@@ -1,6 +1,8 @@
+numpy
 requests
 pandas
 pyarrow
 scikit-learn
+scipy
 matplotlib
 xgboost

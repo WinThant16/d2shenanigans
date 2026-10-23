@@ -14,8 +14,8 @@ print(f"X {X.shape}, y {y.shape}")
 # X and y are already sorted oldest->newest (in fixed build_features).
 # So slicing by position IS slicing by time. No shuffling.
 #   train = first 70%   (model fits on this)
-#   val   = next 10%    (XGBoost early stopping uses this)
-#   test  = last 20%    (touched once, for the final number)
+#   val   = next 15%    (XGBoost early stopping uses this)
+#   test  = last 15%    (touched once, for the final number)
 # Compute two split points and make three slices of each array.
 n = len(X)
 train_end = int(n * 0.70)
